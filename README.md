@@ -49,9 +49,4 @@ The dataset contains records for 2,143 individuals and includes the following va
 
 ---
 
-## Getting Started
-### Clone the Repository
-```bash
-git clone <https://github.com/amovva10/Alzheimers-Predictors-Analysis>
-
 
