@@ -1,0 +1,503 @@
+---
+title: "Analyzing Risk Factors and Predictors of Alzheimer’s Disease"
+author: "Aishwarya Movva"
+date: "November 20th 2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+# Introduction
+
+Alzheimer’s disease is a progressive neurodegenerative disorder that primarily affects memory, cognition, and behavior. It is one of the leading causes of dementia worldwide and imposes a significant burden on healthcare systems, particularly in aging populations. As the prevalence of Alzheimer’s continues to increase, early detection of risk factors associated with the disease becomes crucial. Identifying these risk factors not only aids in delaying the onset of the disease but also improves patient outcomes and reduces healthcare costs.
+
+This study seeks to explore the associations between various demographic, lifestyle, health, and behavioral factors with the likelihood of an Alzheimer’s diagnosis. Using a dataset containing detailed patient information, the project aims to address the following research questions:
+
+1. **Which demographic factors (ex: age, gender, ethnicity) are most strongly associated with Alzheimer's diagnosis?**
+
+2. **How do lifestyle and health metrics (ex: physical activity, diet quality, cholesterol levels) relate to Alzheimer’s diagnosis?**
+
+3. **Are behavioral symptoms and cognitive assessments (ex: personality changes, MMSE scores) significant predictors of Alzheimer’s diagnosis?**
+
+By addressing these questions, the analysis aims to provide insights into the predictors of Alzheimer’s disease, potentially guiding future early detection and intervention strategies.
+
+# Dataset Description
+
+The dataset used in this analysis contains 2,143 patient records with detailed information on demographics, lifestyle factors, health metrics, and cognitive assessments. It was sourced from Kaggle and was specifically designed for research exploring the risk factors associated with Alzheimer’s disease.
+
+**Structure**:
+
+**Rows**: Each row represents an individual patient.
+
+**Columns**: The dataset includes 18 key variables categorized as follows:
+
+**Demographics**: Age, gender, ethnicity, education level.
+
+**Lifestyle Factors**: Smoking status, physical activity, diet quality, sleep quality.
+
+**Health Metrics**: Body Mass Index (BMI), cholesterol levels (total, LDL, HDL, triglycerides), blood pressure (systolic and diastolic).
+
+**Cognitive Assessments**: Mini-Mental State Examination (MMSE) scores, Activities of Daily Living (ADL) scores, memory complaints, and behavioral changes.
+
+**Response Variable**: Diagnosis (binary; 0 for "No," 1 for "Yes").
+
+### Data Wrangling:
+
+To prepare the data for analysis, the following steps were performed:
+
+1. **Variable Selection**:  
+   - The dataset originally contained more variables, but only 18 key variables relevant to the research questions were selected for analysis.
+
+2. **Variable Recoding**:  
+   - Binary and categorical variables were recoded for clarity:
+     - `Gender`: Recoded `0` as "Male" and `1` as "Female".
+     - `Ethnicity`: Recoded numerical codes into descriptive categories (e.g., `0` = "Caucasian", `1` = "African American").
+     - `Diagnosis`: Converted `0` to "No" and `1` to "Yes" for better interpretability.
+
+3. **Rounding Numerical Variables**:  
+   - Continuous variables such as **PhysicalActivity**, **DietQuality**, **CholesterolTotal**, **MMSE**, and **ADL** were rounded to one decimal place to simplify visualization and interpretation.
+
+4. **Missing Data Check**:  
+   - A missing data summary was created for all variables. Missing data was minimal and not expected to bias results.
+
+5. **Quantitative Treatment of Age**:  
+   - Age was treated as a quantitative variable for consistency with regression modeling and association analysis.
+
+### Data Collection:
+
+The data was collected as part of a research initiative aimed at identifying potential predictors of Alzheimer’s diagnosis. The diverse range of variables in this dataset enables exploration of associations and patterns relevant to early detection and risk assessment.
+
+### Limitations:
+
+While the dataset provides important information, it is **cross-sectional**, meaning all variables are measured at a single point in time. As a result, the analysis is limited in its ability to establish causal relationships between predictors and outcomes.
+
+# Data Preparation
+
+```{r load-pkg, message = FALSE }
+library(tidyverse)
+library(rsample) 
+```
+
+```{r load-data}
+ # Load the Alzheimer's dataset 
+alzheimers_data <- read_csv("../data/alzheimers_data.csv")
+```
+
+```{r glimpse-data, eval=FALSE}
+# Glimpse at the dataset
+glimpse(alzheimers_data)
+```
+
+```{r alzheimers_data}
+# 18 key variables relevant to the analysis
+alzheimers_data <- alzheimers_data %>% 
+  select(Age, Gender, Ethnicity, Smoking, PhysicalActivity, FamilyHistoryAlzheimers,
+         DietQuality, SleepQuality, CholesterolTotal, MMSE, ADL, EducationLevel,
+         Diagnosis, Confusion, Forgetfulness, PersonalityChanges, MemoryComplaints, BMI)
+```
+
+```{r}
+# Recode binary and coded variables to descriptive categories
+alzheimers_data <- alzheimers_data %>% 
+  mutate(
+    Gender = ifelse(Gender == 0, "Male", "Female"), 
+    Ethnicity = case_when(
+      Ethnicity == 0 ~ "Caucasian",
+      Ethnicity == 1 ~ "African American",
+      Ethnicity == 2 ~ "Asian",
+      Ethnicity == 3 ~ "Other"
+    ),
+    Smoking = ifelse(Smoking == 1, "Yes", "No"),
+    FamilyHistoryAlzheimers = ifelse(FamilyHistoryAlzheimers == 1, "Yes", "No"),
+    EducationLevel = case_when(
+      EducationLevel == 0 ~ "None",
+      EducationLevel == 1 ~ "High School",
+      EducationLevel == 2 ~ "Bachelor’s",
+      EducationLevel == 3 ~ "Higher"
+    ),
+    Diagnosis = ifelse(Diagnosis == 1, "Yes", "No"),
+    Confusion = ifelse(Confusion == 1, "Yes", "No"),
+    Forgetfulness = ifelse(Forgetfulness == 1, "Yes", "No"),
+    PersonalityChanges = ifelse(PersonalityChanges == 1, "Yes", "No"),
+    MemoryComplaints = ifelse(MemoryComplaints == 1, "Yes", "No")
+  )
+```
+
+```{r}
+# Round variables to 1 decimal place 
+alzheimers_data <- alzheimers_data %>%
+  mutate(
+    PhysicalActivity = round(PhysicalActivity, 1),
+    DietQuality = round(DietQuality, 1),
+    SleepQuality = round(SleepQuality, 1),
+    CholesterolTotal = round(CholesterolTotal, 1),
+    MMSE = round(MMSE, 1),
+    ADL = round(ADL, 1),
+    BMI = round(BMI, 1)
+  )
+```
+
+```{r missing_data}
+# Check for missing data in the dataset
+missing_data_summary <- alzheimers_data %>% summarise_all(~ sum(is.na(.)))
+```
+
+---
+
+# Exploratory Data Analysis
+
+### Summary Statistics 
+
+```{r summary-continuous, echo=FALSE}
+# Summary of continuous variables 
+continuous_vars <- alzheimers_data %>% 
+  select(Age, PhysicalActivity, DietQuality, SleepQuality, CholesterolTotal, 
+         MMSE, ADL, BMI)
+summary(continuous_vars)
+```
+
+```{r summary-categorical}
+# Summary of categorical variables 
+categorical_vars <- alzheimers_data %>% 
+  select(Gender, Ethnicity, Smoking, FamilyHistoryAlzheimers, Diagnosis, 
+         Confusion, Forgetfulness, PersonalityChanges, MemoryComplaints)
+categorical_summary <- categorical_vars %>%
+  summarise(across(everything(), ~ list(table(.)))) 
+```
+
+**Age: Median is 75 years, ranging from 60 to 90 years.**
+
+**Physical Activity: Median is 4.8 hours/week, indicating relatively low activity levels.**
+
+**Diet Quality: Median score is 5.1 on a 0–10 scale.**
+
+**Sleep Quality: Median score is 7.1, suggesting moderately high sleep quality overall.**
+
+**Cholesterol: Median is 224.9 mg/dL, with some participants having elevated levels.**
+
+**MMSE Scores: Median is 14.5, with lower scores observed in diagnosed individuals.**
+
+**ADL: Median is 5, reflecting moderate daily functionality.**
+
+**BMI: Median is 27.8, with most participants in the overweight category.**
+
+## Diagnosis Distribution
+```{r diagnosis-distribution}
+diagnosis_counts <- alzheimers_data %>%
+  group_by(Diagnosis) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = round(100 * Count / sum(Count), 1))
+
+ggplot(diagnosis_counts, aes(x = Diagnosis, y = Count, fill = Diagnosis)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) + 
+  geom_text(aes(label = paste0(Percentage, "%")), vjust = -0.5, size = 4) +
+  labs(title = "Distribution of Alzheimer’s Diagnosis", 
+       x = "Diagnosis", y = "Count") + 
+  scale_fill_manual(values = c("Yes" = "purple", "No" = "darkgrey")) + 
+  theme_minimal()
+```
+
+**This bar chart displays the distribution of Alzheimer’s diagnosis within the dataset. Approximately 35.2% of participants were diagnosed with Alzheimer’s, while the remaining 64.8% were not. This highlights the prevalence of Alzheimer’s within the study population.**
+
+## Age Distribution
+```{r age-distribution}
+ggplot(alzheimers_data, aes(x = Age)) + 
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black") + 
+  labs(title = "Age Distribution", 
+       x = "Age", y = "Frequency") + 
+  theme_minimal()
+```
+
+**This histogram shows the distribution of participants' ages. The data is centered around 60-80 years, with the highest frequency observed in the 70–75 age group.This focus on older adults is consistent with the understanding that Alzheimer’s disease primarily affects aging populations. The distribution appears symmetrical, with the median age being 75 years, as indicated in the summary statistics.**
+
+## MMSE Scores by Diagnosis Distribution
+```{r mmse-by-diagnosis}
+ggplot(alzheimers_data, aes(x = Diagnosis, y = MMSE, fill = Diagnosis)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  labs(title = "MMSE Scores by Alzheimer’s Diagnosis", 
+       x = "Diagnosis", y = "MMSE Score") + 
+  scale_fill_manual(values = c("Yes" = "#008080", "No" = "#D3D3D3")) + 
+  theme_minimal()
+```
+
+**This box plot illustrates the distribution of MMSE scores by Alzheimer's diagnosis groups. Individuals diagnosed with Alzheimer's have much lower scores on the MMSE, and the median for this group is far below that of the non-diagnosed group. This would be expected, as a condition of Alzheimer's disease includes cognitive impairment. The summary statistics show a median MMSE score for the entire dataset of 14.5, skewed toward the low end by diagnosed individuals. The strong correlation underscores the prospective value of MMSE scores as an indicator for the diagnosis of Alzheimer's disease.**
+
+## CholesterolLevels Distribution
+```{r cholesterol-distribution}
+median_cholesterol <- median(alzheimers_data$CholesterolTotal, na.rm = TRUE)
+
+ggplot(alzheimers_data, aes(x = CholesterolTotal)) + 
+  geom_histogram(binwidth = 10, fill = "#4682B4", color = "black") +
+  geom_vline(aes(xintercept = median_cholesterol), color = "red", linetype = "dashed", size = 1) + 
+  labs(title = "Cholesterol Levels Distribution", 
+       x = "Cholesterol (mg/dL)", y = "Frequency") + 
+  annotate("text", x = median_cholesterol + 10, y = max(table(cut(alzheimers_data$CholesterolTotal, breaks = seq(150, 300, 10)))), 
+           label = paste0("Median: ", round(median_cholesterol, 1)), color = "red", hjust = 0) +
+  theme_minimal()
+```
+
+**This histogram illustrates the distribution of total cholesterol levels in the dataset. Most participants have cholesterol levels between 150-250 mg/dL, with a few outliers above 250 mg/dL. A red dashed line marks the median cholesterol level, approximately 224.9 mg/dL**
+
+## Gender Distribution
+```{r gender-distribution}
+ggplot(alzheimers_data, aes(x = Gender, fill = Gender)) + 
+  geom_bar(show.legend = FALSE) + 
+  labs(title = "Gender Distribution", 
+       x = "Gender", y = "Count") + 
+  scale_fill_manual(values = c("Male" = "#87CEEB", "Female" = "#FFB6C1")) + 
+  theme_minimal()
+```
+
+**This bar chart displays the distribution of genders in the dataset. A higher proportion of individuals are female, which aligns with established research indicating that Alzheimer’s disease is more frequently diagnosed in women compared to men.**
+
+# Ethnicity Distribution
+```{r ethnicity-distribution}
+ethnicity_counts <- alzheimers_data %>%
+  count(Ethnicity) %>%
+  arrange(-n) 
+
+alzheimers_data <- alzheimers_data %>%
+  mutate(Ethnicity = factor(Ethnicity, levels = ethnicity_counts$Ethnicity))
+
+ggplot(alzheimers_data, aes(x = Ethnicity, fill = Ethnicity)) + 
+  geom_bar(show.legend = FALSE) + 
+  labs(title = "Ethnicity Distribution (Sorted by Count)", 
+    x = "Ethnicity", y = "Count") + 
+  scale_fill_manual(values = c( "Caucasian" = "#8E44AD", "African American" = "#3498DB",   "Asian" = "#2ECC71",  "Other" = "#BDC3C7" )) + 
+  theme_minimal()
+```
+
+**This bar chart displays the distribution of ethnic groups in the dataset, sorted by count. Caucasians represent the largest group, followed by African Americans, Asians, and Other ethnicity.**
+
+## Family History Among Caucasians Diagnosed with Alzheimer’s Distribution
+```{r family-history-caucasians}
+caucasian_data <- alzheimers_data %>%
+  filter(Ethnicity == "Caucasian")
+
+ggplot(caucasian_data, aes(x = FamilyHistoryAlzheimers, fill = FamilyHistoryAlzheimers)) +  geom_bar(show.legend = FALSE) + 
+  labs(title = "Family History Among Caucasians Diagnosed with Alzheimer’s", 
+    x = "Family History", y = "Count") + 
+  scale_fill_manual(values = c("Yes" = "#8E44AD", "No" = "#BDC3C7")) +
+  theme_minimal()
+```
+
+**This bar chart illustrates the distribution of family history of Alzheimer's disease among Caucasians who have already been diagnosed with the disease. The results of the study suggest that the majority of participants do not have family history of Alzheimer's disease. This observation concludes that while genetic predisposition may play a role, other factors are likely influential in Alzheimer’s diagnosis within this demographic.**
+
+## Memory Complaints and Diagnosis Distribution
+```{r memory-complaints-diagnosis}
+memory_complaint_props <- alzheimers_data %>%
+  group_by(MemoryComplaints, Diagnosis) %>%
+  summarise(Count = n()) %>%
+  mutate(Proportion = Count / sum(Count))
+
+ggplot(memory_complaint_props, aes(x = MemoryComplaints, y = Proportion, fill = Diagnosis)) + 
+  geom_bar(stat = "identity", position = "fill") + 
+  geom_text(aes(label = scales::percent(Proportion, accuracy = 1)), 
+            position = position_stack(vjust = 0.5), size = 3) +
+  labs(title = "Memory Complaints and Alzheimer’s Diagnosis",
+    x = "Memory Complaints",y = "Proportion") +
+  scale_fill_manual(values = c("Yes" = "#99ABE8", "No" = "#D499E8")) + 
+  theme_minimal()
+``` 
+
+**This stacked bar chart highlights the proportion of Alzheimer’s diagnoses based on reported memory complaints. Among participants who reported memory complaints, 64% were diagnosed with Alzheimer’s, compared to only 28% of participants without memory complaints.**
+
+## Physical Activity vs. Diet Quality by Diagnosis Distribution
+```{r physical-diet-diagnosis}
+ggplot(alzheimers_data, aes(x = PhysicalActivity, fill = Diagnosis)) + 
+  geom_histogram(binwidth = 1, position = "dodge") + 
+  scale_fill_manual(values = c("Yes" = "#EBCC86", "No" = "#E89D99")) + 
+  labs(title = "Physical Activity Levels by Alzheimer’s Diagnosis", 
+       x = "Physical Activity (hours/week)", y = "Count") + 
+  theme_minimal()
+```
+
+**This histogram compares the distribution of physical activity levels (hours per week) between individuals diagnosed with Alzheimer’s disease and those without. Participants diagnosed with Alzheimer’s tend to report lower levels of physical activity, as evidenced by the higher frequency of low activity (0–3 hours/week) in this group.**
+
+## Education Level Distribution
+```{r education_level}
+alzheimers_data$EducationLevel <- factor(trimws(alzheimers_data$EducationLevel), 
+levels = c("None", "High School", "Bachelor’s", "Higher"))
+
+ggplot(alzheimers_data, aes(x = EducationLevel, fill = Diagnosis)) +
+  geom_bar(position = "dodge", stat = "count") +
+  labs(title = "Distribution of Education Level by Alzheimer’s Diagnosis",
+       x = "Education Level", y = "Count") +
+  scale_fill_manual(values = c("Yes" = "purple", "No" = "darkgrey")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+**The bar chart shows the distribution of Education Level among the participants. The highest count is observed in the High School category, followed by Bachelor's, Higher, and None. The differences in education levels could also relate to factors such as socio-economic status, which may influence cognitive health outcomes.**
+
+---
+
+# Statistical Methods and Modeling
+
+To address the research questions, a logistic regression model was selected as the primary statistical tool. Logistic regression is well-suited for this analysis because the response variable, Alzheimer’s diagnosis, is binary (0 = "No," 1 = "Yes"). This model allows for the assessment of the association between various predictors (e.g., demographic, lifestyle, and cognitive factors) and the likelihood of an Alzheimer’s diagnosis.
+
+The analysis followed these steps:
+
+1. **Data Splitting**: The dataset was split into training and testing subsets to build and evaluate the model's performance.
+
+2. **Variable Selection**: Predictors included were chosen based on exploratory data analysis (EDA) results and theoretical relevance to Alzheimer’s risk.
+
+3. **Model Fitting**: A logistic regression model was fit to the training data, using predictors such as age, MMSE scores, cholesterol levels, and physical activity.
+
+4. **Model Evaluation**: The model's performance was evaluated on the testing set using metrics like accuracy, confusion matrix, and the area under the ROC curve (AUC).
+
+5. **Interpretation**: The results were interpreted to identify significant predictors and their potential implications for understanding Alzheimer’s risk.
+
+```{r split-data, echo=FALSE}
+# Set the seed
+set.seed(4321)
+
+# Split the data: 80% training, 20% testing
+data_split <- initial_split(alzheimers_data, prop = 0.8)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+
+# Recode Diagnosis variable for logistic regression (0 = No, 1 = Yes)
+model_train_data <- train_data %>%
+  mutate(Diagnosis = ifelse(Diagnosis == "Yes", 1, 0))
+model_test_data <- test_data %>%
+  mutate(Diagnosis = ifelse(Diagnosis == "Yes", 1, 0))
+```
+
+**To evaluate the logistic regression model's performance, the dataset was split into subsets of 80% training and 20% for testing. The training datasets were used as a foundation for building the model, while the testing datasets are used to evaluate the performance of the model in predictive accuracy. A random seed was set to ensure results reproducibility. Also, in order to prepare data for logistic regression, a copy of the training and testing datasets was created; in this new dataset, the response variable Diagnosis was reclassified into a binary format: 0 = "No," 1 = "Yes." The process ensures compatibility with the logistic regression framework while ensuring that the original datasets remain intact for EDA.**
+
+```{r logistic-model, echo=FALSE}
+# Fit a logistic regression model to the training data 
+alzheimers_model_expanded <- glm(
+  Diagnosis ~ Age + Gender + MMSE + CholesterolTotal +
+              PhysicalActivity + DietQuality + BMI + Ethnicity +
+              FamilyHistoryAlzheimers + Smoking + SleepQuality +
+              ADL + EducationLevel + Confusion + Forgetfulness +
+              PersonalityChanges + MemoryComplaints, 
+  data = model_train_data,
+  family = binomial
+)
+
+# Summary of the logistic regression model
+summary(alzheimers_model_expanded)
+```
+
+**Logistic regression was chosen as it's ideal for modeling a binary response variable in this case, Alzheimer's diagnosis, while evaluating the effect of multiple predictors; it is interpretable using odds ratios, together with its ability to handle quantitative and categorical predictors, so as to answer the research questions.**
+
+**Key Findings from the Logistic Regression Model**
+
+1. **MMSE Scores**:  
+   The MMSE score is a significant predictor (p-value < 0.001). The coefficient for MMSE is negative (-0.0748), indicating that higher MMSE scores, which reflect better cognitive function, are associated with a lower likelihood of an Alzheimer’s diagnosis. This aligns with expectations, as cognitive decline is a hallmark of the disease.
+
+2. **Sleep Quality**:  
+   Sleep quality is also a significant predictor (p-value = 0.00626). The negative coefficient (-0.0921) suggests that better sleep quality is associated with a reduced likelihood of Alzheimer’s diagnosis. Poor sleep has been identified in research as a potential risk factor for cognitive decline.
+
+3. **Activities of Daily Living (ADL)**:  
+   ADL scores are highly significant (p-value < 0.001). The negative coefficient (-0.2797) indicates that better functional ability in daily living is strongly associated with a lower likelihood of Alzheimer’s diagnosis. This highlights the role of physical and functional independence in mitigating risk.
+
+4. **Memory Complaints**:  
+   Memory complaints are another significant predictor (p-value < 0.001), with a positive coefficient (1.8381). Individuals who report memory complaints are much more likely to be diagnosed with Alzheimer’s, emphasizing the importance of early reporting of cognitive symptoms.
+
+5. **Other Predictors**:  
+   While variables such as age, gender, ethnicity, cholesterol levels, physical activity, and diet quality were included in the model, they were not statistically significant predictors (p-values > 0.05). Their direct association with Alzheimer’s diagnosis is weaker in this dataset or requires further study.
+
+6. **Model Fit**:  
+   The model’s AIC (Akaike Information Criterion) is 1782.5, and the null deviance decreased significantly from 2223.3 to 1738.5, indicating a good fit. The inclusion of predictors improved the model’s ability to explain the variation in Alzheimer’s diagnosis.
+
+
+```{r tidy_summary}
+# Model Summary using tidy()
+library(broom)
+
+tidy_summary <- tidy(alzheimers_model_expanded)
+
+# Filter out significant predictors (p-value < 0.05)
+significant_predictors <- tidy_summary %>%
+  filter(p.value < 0.05) %>%
+  filter(term != "(Intercept)") 
+
+ggplot(significant_predictors, aes(x = reorder(term, abs(estimate)), y = abs(estimate))) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  coord_flip() +
+  labs(title = "Significant Importance Based on Absolute Coefficients",
+       x = "Predictors", y = "Absolute Coefficient Estimate") +
+  theme_minimal()
+```
+
+**The bar plot shows the absolute coefficients of predictors from the logistic regression model, highlighting their importance in predicting Alzheimer’s diagnosis:**
+
+ **1. Memory Complaints:**The strongest predictor, significantly increasing the likelihood of Alzheimer’s diagnosis.
+ 
+**2. Education Level:** Found to be the second most significant predictor. The prevalence of high school education in the dataset suggests that lower education levels could be a risk factor for Alzheimer’s, as cognitive reserve is believed to delay symptom onset.
+ 
+ **3. ADL Scores:** Lower scores, indicating reduced daily functionality, are strongly associated with a higher diagnosis likelihood.
+ 
+  **4. MMSE and Sleep Quality:** Both are significant but less impactful predictors, reflecting cognitive and lifestyle factors.
+
+```{r Predict_probabilitie}
+# Predict probabilities on the testing data
+test_predictions <- predict(alzheimers_model_expanded, newdata = model_test_data, type = "response")
+test_pred_class <- ifelse(test_predictions > 0.5, 1, 0)
+```
+
+*Using the logistic regression model, I predicted probabilities of an Alzheimer's diagnosis for each individual in the testing dataset. These probabilities express the likelihood of a diagnosis based on the model's predictors. In order to classify these probabilities into binary outcomes, a threshold of 0.5 was applied. If the probability was greater than 0.5, the individual was classified as "Yes" (diagnosed with Alzheimer's); otherwise, they were classified as "No" (not diagnosed).*
+
+```{r confusion_matrix}
+# Confusion matrix
+confusion_matrix <- table(Predicted = test_pred_class, Actual = model_test_data$Diagnosis)
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+list(Confusion_Matrix = confusion_matrix,  
+     Accuracy = accuracy)
+```
+
+*The confusion matrix gives the overall summary of the model's prediction about the test data. True Positives are Alzheimer's cases that are correctly predicted as "Yes," while True Negatives are non-Alzheimer's cases that are predicted correctly as "No." False Positives are when non-Alzheimer's cases are predicted incorrectly as "Yes," and False Negatives are Alzheimer's cases that are predicted incorrectly as "No." The overall accuracy of the model is about 76.2%, which is a fair balance between identifying true cases correctly and avoiding false alarms.*
+
+```{r roc_curve}
+#ROC curve and AUC calculation
+library(pROC)
+roc_curve <- roc(model_test_data$Diagnosis, test_predictions)
+plot(roc_curve, col = "blue", main = "ROC Curve for Alzheimer’s Prediction")
+
+#  AUC value
+auc_value <- auc(roc_curve)
+text(0.6, 0.2, paste("AUC =", round(auc_value, 2)), col = "red")
+```
+
+**The ROC Curve gives a visual assessment of the model performance by graphically showing sensitivity (True Positive Rate) in relation to 1 - specificity (False Positive Rate). The AUC is measured at 0.81, indicating that the model has a strong potential to distinguish Alzheimer's from non-Alzheimer's cases.**
+
+---
+
+## Results and Discussion
+The aim of the study is to determine the associations among multiple demographic, lifestyle, health, and behavioral factors with the likelihood of a diagnosis of Alzheimer's disease. There were a number of major findings based on the analyses of EDA and logistic regression modeling that answered the research questions posed at the commencement of the study, in line with the purpose stated.
+
+### Key Findings
+
+1. **Which demographic factors (e.g., age, gender, ethnicity) are most strongly associated with Alzheimer's diagnosis?**
+
+  Preliminary data exploration showed that the median age of participants was 75 years, with most of the data falling between 60 and 80 years. However, age was not a significant predictor in the logistic regression model. This means that although age is known to be an important risk factor for Alzheimer's disease, it doesn't seem to have a direct effect in this dataset, likely because there isn't much variance in age among the sample. Also, other factors such as cognitive symptoms and everyday functionality may have a more significant impact on diagnosis.
+
+2. **How do lifestyle and health metrics (e.g., physical activity, diet quality, cholesterol levels) relate to Alzheimer’s diagnosis?**
+
+While exploratory data analysis revealed that participants diagnosed with Alzheimer's reported lower levels of physical activity, physical activity per se did not turn out to be a significant predictor in the logistic regression model. In contrast, **sleep quality** was a significant predictor: better sleep quality associated with a decreased likelihood of an Alzheimer's diagnosis. This finding is in line with previous studies that proposed poor sleep quality as a potential major risk factor for cognitive decline, thus underlining the critical importance of sleep hygiene in the prevention of Alzheimer's disease. 
+
+3. **Are behavioral symptoms and cognitive assessments (e.g., personality changes, MMSE scores) significant predictors of Alzheimer’s diagnosis?**
+
+**Memory complaints** have been identified as one of the most important predictors of an Alzheimer's diagnosis. EDA found that 64% of those with self-reported memory complaints received an Alzheimer's diagnosis, compared to only 28% of those who had no complaints. The strong nature of this association was confirmed by the logistic regression model, where memory complaints showed the highest positive coefficient. This result suggests that memory complaints might be an early predictor of Alzheimer's disease and that subjects who do not express these symptoms may benefit from early diagnostic treatment.
+
+### Model Interpretation
+
+The Logistic regression identified important predictors for the diagnosis of Alzheimer's disease included scores on the **MMSE**, **memory complaints**, **ADL**, and **sleep quality**. High scores on the **MMSE**, indicating better cognitive functioning, and high scores on the ADL, indicating better functionality in daily activities, were associated with lower probabilities of a diagnosis of Alzheimer's disease. In contrast, the presence of memory complaints and poor sleep quality were related to a higher likelihood of such a diagnosis. Interestingly, the variables of **age**, **gender**, and **cholesterol levels** did not come out as significant predictors in the logistic regression model. This will perhaps be due to either little variability in these variables, or their indirect effects on this dataset.
+
+---
+
+## Conclusion
+
+This study has successfully identified key Alzheimer's diagnosis predictors through exploratory data analysis and logistic regression modeling. The study found the most important predictors of an Alzheimer's diagnosis by investigating the relationships among demographic, lifestyle, health, and behavioral factors: it found that **memory complaints**, **cognitive function** as measured by MMSE scores, and **ADL scores** were most significant. Moreover, a further important predictor was found to be **sleep quality**, indicating how the risk of developing Alzheimer's includes the involvement of lifestyle factors.
+
+The cross-sectional nature of the data set precludes making causal inferences. However, these findings do suggest that such cognitive screens, combined with behavioral markers such as memory complaints, are very important tools in early identification and intervention. The lack of notable findings concerning age, gender, and health metrics like the levels of cholesterol might speak to either a narrow range of variability in these kinds of variables within the dataset, or else other factors—in their interaction with other predictors—that may contribute to an effect on Alzheimer's diagnosis.
+
+Future research should focus on using longitudinal datasets, and must be done in establishing a causal relationship between these predictors and Alzheimer's diagnosis. More predictive performance of the model would come from expanding the dataset on a more diverse participant sample or including supplementary risk factors. Nonetheless, this study has worthy insight into those factors most relevant for the early prediction of Alzheimer's, further establishing the importance of combining all the domains of cognitive and behavioral assessment within screening programs.
+
+In conclusion, this study underscores the significance of early cognitive and behavioral symptoms in the diagnosis of Alzheimer’s disease. By concentrating on predictors such as memory complaints, cognitive function, and daily living abilities, healthcare professionals can more effectively identify individuals at an elevated risk and initiate early interventions. The findings contribute to a broader understanding of the risk factors associated with Alzheimer’s and emphasize areas for future research that may refine predictive models and enhance clinical practices.
